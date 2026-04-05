@@ -56,11 +56,4 @@ How It Works
                 Risks
                 Impact
                 Suggested fixes
-📊 Example Output
-Open Port 22 → SSH exposed
-Missing HSTS → MITM risk
-No SPF/DMARC → Email spoofing risk
-🎯 Future Enhancements
-AI-based risk prediction
-Automated remediation suggestions
-Continuous monitoring system
+
