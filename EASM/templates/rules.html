@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}EASM — Risk Rules{% endblock %}
+{% block content %}
+<div class="rules-wrap">
+  <div style="margin-bottom:1.5rem">
+    <div style="font-size:10px;letter-spacing:0.15em;color:var(--text-2);font-family:var(--font-mono);margin-bottom:0.4rem">RULE ENGINE</div>
+    <h2 style="font-size:1.4rem;font-weight:700;color:var(--text-0)">Risk Scoring Rules</h2>
+    <p style="font-size:13px;color:var(--text-2);margin-top:0.25rem">{{ rules|length }} rules active across 5 scanning modules</p>
+  </div>
+
+  <div class="panel">
+    <table class="easm-table">
+      <thead>
+        <tr><th>Rule ID</th><th>Description</th><th>Module</th><th>Severity</th><th>Base Score</th></tr>
+      </thead>
+      <tbody>
+        {% for r in rules %}
+        <tr>
+          <td class="mono" style="color:var(--accent)">{{ r.id }}</td>
+          <td>{{ r.name }}</td>
+          <td>
+            <span style="font-size:10px;font-family:var(--font-mono);color:var(--text-2);background:var(--bg-surface);padding:2px 7px;border-radius:4px">
+              {{ r.id.split('-')[0]|lower }}
+            </span>
+          </td>
+          <td><span class="badge badge-{{ r.severity|lower }}">{{ r.severity }}</span></td>
+          <td class="mono" style="color:var(--text-0)">{{ r.score }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

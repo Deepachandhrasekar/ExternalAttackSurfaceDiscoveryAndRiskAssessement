@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}EASM — Scanning {{ target }}{% endblock %}
+{% block content %}
+
+<div class="progress-wrap">
+  <div class="progress-box">
+
+    <div class="radar-anim">
+      <div class="radar-ring"></div>
+      <div class="radar-ring"></div>
+      <div class="radar-ring"></div>
+      <div class="radar-dot"></div>
+    </div>
+
+    <div class="progress-label">SCANNING TARGET</div>
+    <div class="progress-target">{{ target }}</div>
+
+    <div style="margin:1.25rem 0 0.5rem;">
+      <div class="pbar-outer">
+        <div class="pbar-inner" id="pbar" style="width:3%"></div>
+      </div>
+    </div>
+
+    <div class="progress-step" id="step-label">Initializing scan...</div>
+
+    <div class="step-pipeline">
+      <div class="sp-item" id="sp0"><div class="sp-dot"></div><div class="sp-label">Ports</div></div>
+      <div class="sp-item" id="sp1"><div class="sp-dot"></div><div class="sp-label">DNS</div></div>
+      <div class="sp-item" id="sp2"><div class="sp-dot"></div><div class="sp-label">SSL/TLS</div></div>
+      <div class="sp-item" id="sp3"><div class="sp-dot"></div><div class="sp-label">SSH</div></div>
+      <div class="sp-item" id="sp4"><div class="sp-dot"></div><div class="sp-label">HTTP</div></div>
+      <div class="sp-item" id="sp5"><div class="sp-dot"></div><div class="sp-label">Risk</div></div>
+    </div>
+
+    <div class="progress-hint">Results will appear automatically when complete</div>
+  </div>
+</div>
+
+<script>
+const TASK_ID = "{{ task_id }}";
+
+const STEP_IDX = {
+  "Port Scanning":   0,
+  "DNS Enumeration": 1,
+  "SSL/TLS Analysis":2,
+  "SSH Detection":   3,
+  "HTTP Security":   4,
+  "Analysing risk":  5,
+};
+
+function setProgress(pct, label) {
+  document.getElementById("pbar").style.width = pct + "%";
+  if (label) document.getElementById("step-label").textContent = label;
+}
+
+function activateStep(idx) {
+  for (let i = 0; i < 6; i++) {
+    const el = document.getElementById("sp" + i);
+    el.classList.remove("active","done");
+    if (i < idx) el.classList.add("done");
+    else if (i === idx) el.classList.add("active");
+  }
+}
+
+function poll() {
+  fetch("/status/" + TASK_ID)
+    .then(r => r.json())
+    .then(d => {
+      if (d.state === "PENDING") {
+        setProgress(3, "Waiting in queue...");
+      } else if (d.state === "PROGRESS") {
+        const step = d.step || "";
+        const pct  = d.progress || 5;
+        setProgress(pct, "Running: " + step + "...");
+        const idx = STEP_IDX[step];
+        if (idx !== undefined) activateStep(idx);
+      } else if (d.state === "SUCCESS") {
+        setProgress(100, "Scan complete! Loading results...");
+        for (let i = 0; i < 6; i++) {
+          const el = document.getElementById("sp" + i);
+          el.classList.remove("active"); el.classList.add("done");
+        }
+        setTimeout(() => { window.location.href = "/dashboard/" + TASK_ID; }, 600);
+        return;
+      } else if (d.state === "FAILURE") {
+        document.getElementById("step-label").textContent = "Scan failed: " + (d.error || "unknown error");
+        document.getElementById("pbar").style.background = "var(--critical)";
+        return;
+      }
+      setTimeout(poll, 1800);
+    })
+    .catch(() => setTimeout(poll, 2500));
+}
+
+poll();
+</script>
+
+{% endblock %}

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>EASM Report — {{ scan_target }}</title>
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; background:#fff; color:#1a1a2e; margin:0; padding:2rem; }
+    h1 { color:#0f172a; font-size:1.6rem; margin-bottom:0.25rem; }
+    h2 { color:#1e3a5f; font-size:1.1rem; border-bottom:2px solid #e2e8f0; padding-bottom:0.4rem; margin:1.5rem 0 0.75rem; }
+    table { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:1rem; }
+    th { background:#f1f5f9; color:#475569; text-transform:uppercase; font-size:10px; letter-spacing:0.08em; padding:8px 10px; text-align:left; border:1px solid #e2e8f0; }
+    td { padding:8px 10px; border:1px solid #e2e8f0; vertical-align:top; }
+    tr:nth-child(even) td { background:#f8fafc; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:700; }
+    .badge-critical { background:#fee2e2; color:#dc2626; }
+    .badge-high     { background:#ffedd5; color:#ea580c; }
+    .badge-medium   { background:#fef9c3; color:#ca8a04; }
+    .badge-low      { background:#dcfce7; color:#16a34a; }
+    .summary-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:1rem; margin-bottom:1.5rem; }
+    .sc { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:0.75rem; text-align:center; }
+    .sc-label { font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.1em; }
+    .sc-val   { font-size:1.5rem; font-weight:800; color:#0f172a; }
+    .meta { font-size:12px; color:#64748b; margin-bottom:1.5rem; }
+    @media print { body { padding:0; } }
+  </style>
+</head>
+<body>
+<h1>External Attack Surface Report</h1>
+<div class="meta">Target: <strong>{{ scan_target }}</strong></div>
+
+<h2>Risk Summary</h2>
+<div class="summary-grid">
+  <div class="sc"><div class="sc-label">Score</div><div class="sc-val">{{ scan_summary.total_score }}</div></div>
+  <div class="sc"><div class="sc-label">Level</div><div class="sc-val" style="font-size:1rem">{{ scan_summary.risk_level }}</div></div>
+  <div class="sc"><div class="sc-label">Critical</div><div class="sc-val" style="color:#dc2626">{{ scan_summary.critical }}</div></div>
+  <div class="sc"><div class="sc-label">High</div><div class="sc-val" style="color:#ea580c">{{ scan_summary.high }}</div></div>
+  <div class="sc"><div class="sc-label">Medium</div><div class="sc-val" style="color:#ca8a04">{{ scan_summary.medium }}</div></div>
+  <div class="sc"><div class="sc-label">Low</div><div class="sc-val" style="color:#16a34a">{{ scan_summary.low }}</div></div>
+</div>
+
+<h2>Open Ports</h2>
+<table>
+  <thead><tr><th>Port</th><th>Protocol</th><th>Service</th><th>Severity</th></tr></thead>
+  <tbody>
+  {% for p in scan_ports %}
+  <tr>
+    <td>{{ p.number }}</td><td>{{ p.protocol }}</td><td>{{ p.service }}</td>
+    <td><span class="badge badge-{{ p.severity|lower }}">{{ p.severity }}</span></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Security Findings &amp; Remediation</h2>
+<table>
+  <thead><tr><th>Severity</th><th>Module</th><th>Issue</th><th>Attack Vector</th><th>Impact</th><th>Remediation</th></tr></thead>
+  <tbody>
+  {% for f in findings %}
+  <tr>
+    <td><span class="badge badge-{{ f.severity|lower }}">{{ f.severity }}</span></td>
+    <td>{{ f.module }}</td>
+    <td>{{ f.issue }}</td>
+    <td>{{ f.attack }}</td>
+    <td>{{ f.impact }}</td>
+    <td>{{ f.fix }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if dns_data %}
+<h2>DNS Information</h2>
+<p><strong>IP:</strong> {{ dns_data.ip or '—' }} &nbsp;|&nbsp; <strong>Domain:</strong> {{ dns_data.domain or '—' }}</p>
+{% if dns_data.email_security %}
+<p>
+  SPF: {{ '✓' if dns_data.email_security.spf else '✗' }} &nbsp;·&nbsp;
+  DMARC: {{ '✓' if dns_data.email_security.dmarc else '✗' }} &nbsp;·&nbsp;
+  DKIM: {{ '✓' if dns_data.email_security.dkim else '✗' }}
+</p>
+{% endif %}
+{% endif %}
+
+{% if ssl %}
+<h2>SSL / TLS</h2>
+<p>
+  Status: {{ 'Enabled' if ssl.enabled else 'Not enabled' }} &nbsp;·&nbsp;
+  Protocol: {{ ssl.protocol or '—' }} &nbsp;·&nbsp;
+  Cipher: {{ ssl.cipher or '—' }} &nbsp;·&nbsp;
+  Expires: {{ ssl.expires or '—' }} ({{ ssl.days_left or '?' }} days)
+</p>
+{% endif %}
+</body>
+</html>

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}EASM — External Attack Surface Management{% endblock %}
+{% block content %}
+
+<div class="hero-wrap">
+  <div class="hero-inner">
+
+    <div class="hero-chip">
+      ⬡ &nbsp; EXTERNAL ATTACK SURFACE MANAGEMENT
+    </div>
+
+    <h1 class="hero-title">
+      Map Your <span>Exposure</span>.<br>Eliminate the Risk.
+    </h1>
+
+    <p class="hero-desc">
+      Multi-layer security scanning across ports, DNS, SSL/TLS, SSH &amp; HTTP —
+      with automated risk scoring and AI-powered remediation guidance.
+    </p>
+
+    <form method="POST" class="scan-form">
+      {% if error %}
+      <div class="scan-error">⚠ &nbsp;{{ error }}</div>
+      {% endif %}
+      <div class="scan-field">
+        <div class="scan-icon">⬡</div>
+        <input
+          type="text" name="target" class="scan-input"
+          placeholder="example.com  or  192.168.1.1"
+          required autocomplete="off" spellcheck="false"
+        >
+        <button type="submit" class="scan-btn">Run Scan →</button>
+      </div>
+      <p class="scan-hint">Accepts public IP addresses and domain names &nbsp;·&nbsp; Private / loopback addresses are blocked</p>
+    </form>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🔌</div>
+        <div class="feature-label">Port Scanning</div>
+        <div class="feature-desc">Ports 1–1024 with service fingerprinting</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌐</div>
+        <div class="feature-label">DNS Enumeration</div>
+        <div class="feature-desc">Records, email security, zone transfer</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <div class="feature-label">SSL / TLS Analysis</div>
+        <div class="feature-desc">Cert validity, cipher strength, expiry</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🖥</div>
+        <div class="feature-label">SSH Detection</div>
+        <div class="feature-desc">Banner grab and exposure check</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🛡</div>
+        <div class="feature-label">HTTP Security</div>
+        <div class="feature-desc">CSP, HSTS, X-Frame-Options &amp; more</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🤖</div>
+        <div class="feature-label">AI Remediation</div>
+        <div class="feature-desc">Claude AI-powered fix guidance</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,639 @@
+{% extends "base.html" %}
+{% block title %}EASM — {{ scan_target }}{% endblock %}
+{% block content %}
+
+<div class="dash">
+
+  <!-- ════ HEADER ════ -->
+  <div class="dash-header">
+    <div>
+      <div class="dash-target-lbl">SCAN TARGET</div>
+      <div class="dash-target">{{ scan_target }}</div>
+      <div class="dash-meta">
+        {% if dns_data and dns_data.ip %}Resolved: <span style="color:var(--accent)">{{ dns_data.ip }}</span> &nbsp;·&nbsp; {% endif %}
+        Findings: <span style="color:var(--text-0)">{{ findings|length }}</span>
+        &nbsp;·&nbsp;
+        Risk: <span style="color:
+          {% if scan_summary.risk_level == 'CRITICAL' %}var(--critical)
+          {% elif scan_summary.risk_level == 'HIGH' %}var(--high)
+          {% elif scan_summary.risk_level == 'MEDIUM' %}var(--medium)
+          {% else %}var(--low){% endif %}
+        ">{{ scan_summary.risk_level }}</span>
+      </div>
+    </div>
+    <div class="dash-actions">
+      <a href="{{ url_for('index') }}" class="btn-action">＋ New Scan</a>
+    </div>
+  </div>
+
+  <!-- ════ METRIC CARDS ════ -->
+  {% set lvl = scan_summary.risk_level %}
+  <div class="metric-row">
+    <div class="metric-card mc-{% if lvl=='CRITICAL' %}critical{% elif lvl=='HIGH' %}high{% elif lvl=='MEDIUM' %}medium{% else %}low{% endif %}">
+      <div class="mc-label">Risk Score</div>
+      <div class="mc-val">{{ scan_summary.total_score }}</div>
+      <div class="mc-sub">/ 100 · {{ lvl }}</div>
+    </div>
+    <div class="metric-card mc-critical">
+      <div class="mc-label">Critical</div>
+      <div class="mc-val">{{ scan_summary.critical }}</div>
+      <div class="mc-sub">findings</div>
+    </div>
+    <div class="metric-card mc-high">
+      <div class="mc-label">High</div>
+      <div class="mc-val">{{ scan_summary.high }}</div>
+      <div class="mc-sub">findings</div>
+    </div>
+    <div class="metric-card mc-medium">
+      <div class="mc-label">Medium</div>
+      <div class="mc-val">{{ scan_summary.medium }}</div>
+      <div class="mc-sub">findings</div>
+    </div>
+    <div class="metric-card mc-low">
+      <div class="mc-label">Low</div>
+      <div class="mc-val">{{ scan_summary.low }}</div>
+      <div class="mc-sub">findings</div>
+    </div>
+    <div class="metric-card mc-info">
+      <div class="mc-label">Open Ports</div>
+      <div class="mc-val">{{ scan_ports|length }}</div>
+      <div class="mc-sub">detected</div>
+    </div>
+  </div>
+
+  <!-- ════ TABS ════ -->
+  <div class="tab-nav">
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="ports">Ports &amp; Services</button>
+    <button class="tab-btn" data-tab="dns">DNS</button>
+    <button class="tab-btn" data-tab="ssl">SSL / TLS</button>
+    <button class="tab-btn" data-tab="http">HTTP Security</button>
+    <button class="tab-btn" data-tab="findings">Vulnerabilities ({{ findings|length }})</button>
+    <button class="tab-btn ai-tab" data-tab="ai">🤖 AI Remediation</button>
+  </div>
+
+  <!-- ════════ OVERVIEW ════════ -->
+  <div class="tab-pane active" id="tab-overview">
+    <div class="panel-grid-2">
+      <div class="panel">
+        <div class="panel-title">Severity Distribution</div>
+        <div class="chart-wrap"><canvas id="chartSev"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Risk by Module</div>
+        <div class="chart-wrap"><canvas id="chartMod"></canvas></div>
+      </div>
+    </div>
+    <div class="panel-grid-2">
+
+      <!-- SSH status -->
+      <div class="panel">
+        <div class="panel-title">SSH Exposure</div>
+        {% if ssh and ssh.open %}
+        <div class="status-block status-danger">
+          <div class="status-icon">!</div>
+          <div>
+            <div class="status-title">SSH Port 22 — Publicly Open</div>
+            <div class="status-desc">{{ ssh.banner or 'No banner received' }}</div>
+          </div>
+        </div>
+        {% else %}
+        <div class="status-block status-ok">
+          <div class="status-icon">✓</div>
+          <div><div class="status-title">SSH not publicly accessible</div></div>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- SSL status -->
+      <div class="panel">
+        <div class="panel-title">SSL Certificate Status</div>
+        {% if ssl and ssl.error %}
+        <div class="status-block status-danger">
+          <div class="status-icon">✗</div>
+          <div>
+            <div class="status-title">SSL Unavailable or Invalid</div>
+            <div class="status-desc">{{ ssl.error }}</div>
+          </div>
+        </div>
+        {% elif ssl and ssl.enabled %}
+          {% if ssl.days_left is not none and ssl.days_left < 15 %}
+          <div class="status-block status-warn">
+            <div class="status-icon">⚠</div>
+            <div>
+              <div class="status-title">Expiring in {{ ssl.days_left }} days</div>
+              <div class="status-desc">{{ ssl.protocol }} · {{ ssl.cipher }}</div>
+            </div>
+          </div>
+          {% else %}
+          <div class="status-block status-ok">
+            <div class="status-icon">✓</div>
+            <div>
+              <div class="status-title">Valid · {{ ssl.days_left }} days remaining</div>
+              <div class="status-desc">{{ ssl.protocol }} · {{ ssl.cipher }}</div>
+            </div>
+          </div>
+          {% endif %}
+        {% else %}
+        <div class="status-block status-danger">
+          <div class="status-icon">✗</div>
+          <div><div class="status-title">SSL not enabled</div></div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ PORTS ════════ -->
+  <div class="tab-pane" id="tab-ports">
+    {% if scan_ports %}
+    <div class="panel">
+      <div class="panel-title">Open Port Inventory — {{ scan_ports|length }} Detected</div>
+      <table class="easm-table">
+        <thead>
+          <tr><th>Port</th><th>Protocol</th><th>Service</th><th>State</th><th>Severity</th></tr>
+        </thead>
+        <tbody>
+          {% for p in scan_ports %}
+          <tr>
+            <td class="mono" style="color:var(--text-0);font-weight:600">{{ p.number }}</td>
+            <td>{{ p.protocol }}</td>
+            <td><span class="mono">{{ p.service }}</span></td>
+            <td><span class="badge badge-open">OPEN</span></td>
+            <td><span class="badge badge-{{ p.severity|lower }}">{{ p.severity }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if service_dist %}
+    <div class="panel">
+      <div class="panel-title">Service Distribution</div>
+      <div class="chart-wrap"><canvas id="chartSvc"></canvas></div>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">No open ports detected in the scanned range (1–1024).</div>
+    {% endif %}
+  </div>
+
+  <!-- ════════ DNS ════════ -->
+  <div class="tab-pane" id="tab-dns">
+    {% if dns_data %}
+    <div class="panel-grid-2">
+      <div class="panel">
+        <div class="panel-title">DNS Records</div>
+        {% if dns_data.records %}
+        <table class="easm-table">
+          <thead><tr><th>Type</th><th>Values</th></tr></thead>
+          <tbody>
+            {% for rtype, rdata in dns_data.records.items() %}
+            {% if rdata.found %}
+            <tr>
+              <td><span class="badge badge-dns">{{ rtype }}</span></td>
+              <td class="mono" style="font-size:11px;line-height:1.7">
+                {% for v in rdata.values() %}{{ v }}<br>{% endfor %}
+              </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div style="color:var(--text-2);font-size:13px">No DNS records retrieved.</div>
+        {% endif %}
+        {% if dns_data.domain %}
+        <div style="margin-top:0.75rem;font-size:12px;font-family:var(--font-mono);color:var(--text-2)">
+          Domain: <span style="color:var(--accent)">{{ dns_data.domain }}</span>
+        </div>
+        {% endif %}
+      </div>
+
+      <div>
+        <div class="panel">
+          <div class="panel-title">Email Security</div>
+          <div class="check-list">
+            {% set es = dns_data.email_security or {} %}
+
+            <div class="check-row {% if es.spf %}check-ok{% else %}check-fail{% endif %}">
+              <span class="{% if es.spf %}chk-icon-ok{% else %}chk-icon-fail{% endif %}">{% if es.spf %}✓{% else %}✗{% endif %}</span>
+              <div>
+                <div class="chk-label">SPF Record</div>
+                <div class="{% if es.spf %}chk-val-ok{% else %}chk-val-fail{% endif %}">
+                  {% if es.spf %}Present — email spoofing protected{% else %}Missing — attackers can forge your domain emails{% endif %}
+                </div>
+              </div>
+            </div>
+
+            <div class="check-row {% if es.dmarc %}check-ok{% else %}check-fail{% endif %}">
+              <span class="{% if es.dmarc %}chk-icon-ok{% else %}chk-icon-fail{% endif %}">{% if es.dmarc %}✓{% else %}✗{% endif %}</span>
+              <div>
+                <div class="chk-label">DMARC Policy</div>
+                <div class="{% if es.dmarc %}chk-val-ok{% else %}chk-val-fail{% endif %}">
+                  {% if es.dmarc %}Present — phishing policy enforced{% else %}Missing — no enforcement against phishing{% endif %}
+                </div>
+              </div>
+            </div>
+
+            <div class="check-row {% if es.dkim %}check-ok{% else %}check-warn{% endif %}">
+              <span class="{% if es.dkim %}chk-icon-ok{% else %}chk-icon-warn{% endif %}">{% if es.dkim %}✓{% else %}–{% endif %}</span>
+              <div>
+                <div class="chk-label">DKIM</div>
+                <div class="{% if es.dkim %}chk-val-ok{% else %}chk-val-warn{% endif %}">
+                  {% if es.dkim %}Detected{% else %}Not detected{% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="empty-state">No DNS data available.</div>
+    {% endif %}
+  </div>
+
+  <!-- ════════ SSL ════════ -->
+  <div class="tab-pane" id="tab-ssl">
+    {% if ssl %}
+    {% if ssl.error %}
+    <div class="panel">
+      <div class="status-block status-danger">
+        <div class="status-icon">✗</div>
+        <div>
+          <div class="status-title">SSL/TLS Not Available</div>
+          <div class="status-desc">{{ ssl.error }}</div>
+        </div>
+      </div>
+    </div>
+    {% elif ssl.enabled %}
+    <div class="panel-grid-2">
+      <div class="panel">
+        <div class="panel-title">Certificate Details</div>
+        <div class="kv-list">
+          <div class="kv-row"><span class="kv-key">Issuer</span><span class="kv-val">{{ ssl.issuer or '—' }}</span></div>
+          <div class="kv-row"><span class="kv-key">Expires</span><span class="kv-val">{{ ssl.expires or '—' }}</span></div>
+          <div class="kv-row">
+            <span class="kv-key">Days Remaining</span>
+            <span class="kv-val" style="color:{% if ssl.days_left is not none and ssl.days_left < 15 %}var(--critical){% elif ssl.days_left is not none and ssl.days_left < 30 %}var(--medium){% else %}var(--low){% endif %}">
+              {{ ssl.days_left }} days
+            </span>
+          </div>
+          <div class="kv-row"><span class="kv-key">TLS Protocol</span>
+            <span class="kv-val">{{ ssl.protocol }}
+            {% if ssl.protocol in ['TLSv1','TLSv1.1'] %}<span class="badge badge-critical" style="margin-left:6px">WEAK</span>{% else %}<span class="badge badge-ok" style="margin-left:6px">OK</span>{% endif %}
+            </span>
+          </div>
+          <div class="kv-row"><span class="kv-key">Cipher Suite</span>
+            <span class="kv-val">{{ ssl.cipher }}
+            {% if ssl.weak_cipher %}<span class="badge badge-high" style="margin-left:6px">WEAK CIPHER</span>{% endif %}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Security Checks</div>
+        <div class="check-list">
+          <div class="check-row check-ok">
+            <span class="chk-icon-ok">✓</span>
+            <div><div class="chk-label">SSL Enabled</div><div class="chk-val-ok">Certificate is active</div></div>
+          </div>
+          <div class="check-row {% if ssl.protocol not in ['TLSv1','TLSv1.1'] %}check-ok{% else %}check-fail{% endif %}">
+            <span class="{% if ssl.protocol not in ['TLSv1','TLSv1.1'] %}chk-icon-ok{% else %}chk-icon-fail{% endif %}">
+              {% if ssl.protocol not in ['TLSv1','TLSv1.1'] %}✓{% else %}✗{% endif %}
+            </span>
+            <div><div class="chk-label">TLS Version</div>
+            <div class="{% if ssl.protocol not in ['TLSv1','TLSv1.1'] %}chk-val-ok{% else %}chk-val-fail{% endif %}">
+              {% if ssl.protocol not in ['TLSv1','TLSv1.1'] %}Strong version in use{% else %}Weak TLS — upgrade to 1.2+{% endif %}
+            </div></div>
+          </div>
+          <div class="check-row {% if not ssl.weak_cipher %}check-ok{% else %}check-fail{% endif %}">
+            <span class="{% if not ssl.weak_cipher %}chk-icon-ok{% else %}chk-icon-fail{% endif %}">
+              {% if not ssl.weak_cipher %}✓{% else %}✗{% endif %}
+            </span>
+            <div><div class="chk-label">Cipher Strength</div>
+            <div class="{% if not ssl.weak_cipher %}chk-val-ok{% else %}chk-val-fail{% endif %}">
+              {% if not ssl.weak_cipher %}No weak ciphers detected{% else %}Weak cipher in use (RC4/DES){% endif %}
+            </div></div>
+          </div>
+          <div class="check-row {% if ssl.days_left is not none and ssl.days_left > 14 %}check-ok{% else %}check-warn{% endif %}">
+            <span class="{% if ssl.days_left is not none and ssl.days_left > 14 %}chk-icon-ok{% else %}chk-icon-warn{% endif %}">
+              {% if ssl.days_left is not none and ssl.days_left > 14 %}✓{% else %}⚠{% endif %}
+            </span>
+            <div><div class="chk-label">Certificate Expiry</div>
+            <div class="{% if ssl.days_left is not none and ssl.days_left > 14 %}chk-val-ok{% else %}chk-val-warn{% endif %}">
+              {% if ssl.days_left is not none and ssl.days_left > 14 %}{{ ssl.days_left }} days remaining{% else %}Expiring soon — renew now{% endif %}
+            </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="empty-state">SSL/TLS data not available for this target.</div>
+    {% endif %}
+    {% endif %}
+  </div>
+
+  <!-- ════════ HTTP ════════ -->
+  <div class="tab-pane" id="tab-http">
+    {% if https_data %}
+    <div class="panel-grid-2">
+      <div class="panel">
+        <div class="panel-title">Security Header Audit</div>
+        <div class="check-list">
+          {% if https_data.csp %}
+          <div class="check-row check-ok"><span class="chk-icon-ok">✓</span><div><div class="chk-label mono">Content-Security-Policy</div><div class="chk-val-ok">Present</div></div></div>
+          {% else %}
+          <div class="check-row check-fail"><span class="chk-icon-fail">✗</span><div><div class="chk-label mono">Content-Security-Policy</div><div class="chk-val-fail">Missing — XSS attacks possible</div></div></div>
+          {% endif %}
+
+          {% if https_data.hsts %}
+          <div class="check-row check-ok"><span class="chk-icon-ok">✓</span><div><div class="chk-label mono">Strict-Transport-Security</div><div class="chk-val-ok">Present</div></div></div>
+          {% else %}
+          <div class="check-row check-fail"><span class="chk-icon-fail">✗</span><div><div class="chk-label mono">Strict-Transport-Security</div><div class="chk-val-fail">Missing — SSL downgrade attacks possible</div></div></div>
+          {% endif %}
+
+          {% if https_data.x_frame_options %}
+          <div class="check-row check-ok"><span class="chk-icon-ok">✓</span><div><div class="chk-label mono">X-Frame-Options</div><div class="chk-val-ok">Present</div></div></div>
+          {% else %}
+          <div class="check-row check-fail"><span class="chk-icon-fail">✗</span><div><div class="chk-label mono">X-Frame-Options</div><div class="chk-val-fail">Missing — clickjacking possible</div></div></div>
+          {% endif %}
+
+          <div class="check-row check-fail"><span class="chk-icon-fail">✗</span><div><div class="chk-label mono">X-Content-Type-Options</div><div class="chk-val-fail">Missing — MIME sniffing risk</div></div></div>
+          <div class="check-row check-fail"><span class="chk-icon-fail">✗</span><div><div class="chk-label mono">Referrer-Policy</div><div class="chk-val-fail">Missing — information leakage risk</div></div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">HTTP Details</div>
+        <div class="kv-list">
+          <div class="kv-row"><span class="kv-key">Status Code</span><span class="kv-val">{{ https_data.status_code or '—' }}</span></div>
+          <div class="kv-row"><span class="kv-key">Server Banner</span>
+            <span class="kv-val">
+              {% if https_data.server %}
+              <span class="badge badge-medium">{{ https_data.server }}</span>
+              {% else %}<span style="color:var(--low)">Hidden (good)</span>{% endif %}
+            </span>
+          </div>
+          <div class="kv-row"><span class="kv-key">CSP</span>
+            <span class="kv-val"><span class="badge {% if https_data.csp %}badge-ok{% else %}badge-high{% endif %}">{% if https_data.csp %}PRESENT{% else %}MISSING{% endif %}</span></span>
+          </div>
+          <div class="kv-row"><span class="kv-key">HSTS</span>
+            <span class="kv-val"><span class="badge {% if https_data.hsts %}badge-ok{% else %}badge-high{% endif %}">{% if https_data.hsts %}PRESENT{% else %}MISSING{% endif %}</span></span>
+          </div>
+          <div class="kv-row"><span class="kv-key">X-Frame-Options</span>
+            <span class="kv-val"><span class="badge {% if https_data.x_frame_options %}badge-ok{% else %}badge-medium{% endif %}">{% if https_data.x_frame_options %}PRESENT{% else %}MISSING{% endif %}</span></span>
+          </div>
+        </div>
+        {% if https_data.headers %}
+        <div style="margin-top:1rem">
+          <div class="panel-title">Response Headers</div>
+          <pre class="raw-block">{% for k,v in https_data.headers.items() %}{{ k }}: {{ v }}
+{% endfor %}</pre>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="empty-state">HTTP data not available for this target.</div>
+    {% endif %}
+  </div>
+
+  <!-- ════════ VULNERABILITIES / FINDINGS ════════ -->
+  <div class="tab-pane" id="tab-findings">
+    <div class="finding-filters">
+      <button class="filter-chip active" data-filter="all">All ({{ findings|length }})</button>
+      <button class="filter-chip" data-filter="CRITICAL">Critical ({{ scan_summary.critical }})</button>
+      <button class="filter-chip" data-filter="HIGH">High ({{ scan_summary.high }})</button>
+      <button class="filter-chip" data-filter="MEDIUM">Medium ({{ scan_summary.medium }})</button>
+      <button class="filter-chip" data-filter="LOW">Low ({{ scan_summary.low }})</button>
+    </div>
+
+    <div id="findingsList">
+      {% for f in findings %}
+      <div class="finding-card" data-sev="{{ f.severity }}">
+        <div class="finding-stripe stripe-{{ f.severity|lower }}"></div>
+        <div class="finding-body">
+          <div class="finding-top">
+            <span class="badge badge-{{ f.severity|lower }}">{{ f.severity }}</span>
+            <span class="finding-title">{{ f.issue }}</span>
+            <span class="finding-module">{{ f.module }}</span>
+          </div>
+          <div class="finding-rule">Rule: <span style="color:var(--accent)">{{ f.rule_id }}</span> &nbsp;·&nbsp; Risk Weight: {{ f.weight }}</div>
+          <div class="finding-grid">
+            <div>
+              <div class="fg-label">Attack Vector</div>
+              <div class="fg-val">{{ f.attack }}</div>
+            </div>
+            <div>
+              <div class="fg-label">Security Impact</div>
+              <div class="fg-val">{{ f.impact }}</div>
+            </div>
+            <div>
+              <div class="fg-label">Remediation</div>
+              <div class="fg-fix">{{ f.fix }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty-state">No findings detected — target appears clean.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ════════ AI REMEDIATION ════════ -->
+  <div class="tab-pane" id="tab-ai">
+    <div class="ai-panel">
+      <div class="ai-panel-header">
+        <div class="ai-icon">🤖</div>
+        <div>
+          <div class="ai-title">AI-Powered Remediation Advisor</div>
+          <div class="ai-sub">
+            Context-aware remediation for <strong>{{ scan_target }}</strong> —
+            {{ findings|length }} findings · Risk score {{ scan_summary.total_score }}/100 ({{ scan_summary.risk_level }})
+          </div>
+        </div>
+      </div>
+
+      <div class="ai-actions">
+        <button class="ai-btn ai-btn-primary" onclick="askAI('all')">⚡ Analyse All Findings</button>
+        <button class="ai-btn ai-btn-secondary" onclick="askAI('critical')">🔴 Critical &amp; High Only</button>
+        <button class="ai-btn ai-btn-secondary" onclick="askAI('roadmap')">📋 Remediation Roadmap</button>
+      </div>
+
+      <div id="aiLoading" class="ai-loading" style="display:none">
+        <div class="ai-spinner"></div>
+        <span>AI is analysing your security findings...</span>
+      </div>
+
+      <div id="aiOutput" class="ai-output" style="display:none"></div>
+    </div>
+  </div>
+
+</div><!-- /dash -->
+
+<!-- ════ CHART.JS ════ -->
+<script>
+// ── Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ── Finding filters
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    const f = chip.dataset.filter;
+    document.querySelectorAll('.finding-card').forEach(card => {
+      card.style.display = (f === 'all' || card.dataset.sev === f) ? 'flex' : 'none';
+    });
+  });
+});
+
+// ── Chart defaults
+Chart.defaults.color = '#64748b';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 11;
+
+// Severity bar chart
+new Chart(document.getElementById('chartSev'), {
+  type: 'bar',
+  data: {
+    labels: ['Critical','High','Medium','Low'],
+    datasets: [{
+      data: [{{ scan_summary.critical }},{{ scan_summary.high }},{{ scan_summary.medium }},{{ scan_summary.low }}],
+      backgroundColor: ['#f43f5e','#f97316','#eab308','#22c55e'],
+      borderRadius: 5, borderSkipped: false
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false } },
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { stepSize: 1 }, beginAtZero: true }
+    }
+  }
+});
+
+// Module doughnut
+{% set modules = {} %}
+{% for f in findings %}{% set _ = modules.update({f.module: modules.get(f.module, 0) + f.weight}) %}{% endfor %}
+const modLabels = [{% for k in modules %}{{ k|tojson }},{% endfor %}];
+const modVals   = [{% for v in modules.values() %}{{ v }},{% endfor %}];
+new Chart(document.getElementById('chartMod'), {
+  type: 'doughnut',
+  data: {
+    labels: modLabels,
+    datasets: [{ data: modVals, backgroundColor: ['#f43f5e','#f97316','#00c8ff','#22c55e','#a78bfa'], borderWidth: 0, hoverOffset: 6 }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'right', labels: { padding: 14, usePointStyle: true, pointStyleWidth: 8 } } }
+  }
+});
+
+{% if scan_ports and service_dist %}
+// Service pie
+const svcLabels = [{% for k in service_dist %}"{{ k|upper }}",{% endfor %}];
+const svcVals   = [{% for v in service_dist.values() %}{{ v }},{% endfor %}];
+new Chart(document.getElementById('chartSvc'), {
+  type: 'pie',
+  data: {
+    labels: svcLabels,
+    datasets: [{ data: svcVals, backgroundColor: ['#00c8ff','#f43f5e','#f97316','#eab308','#22c55e','#a78bfa','#38bdf8'], borderWidth: 0 }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'right', labels: { padding: 12, usePointStyle: true, pointStyleWidth: 8 } } }
+  }
+});
+{% endif %}
+
+// ── AI Remediation ──────────────────────────────────────────
+const FINDINGS = {{ findings | tojson }};
+const TARGET   = {{ scan_target | tojson }};
+const RISK_SCORE = {{ scan_summary.total_score }};
+const RISK_LEVEL = {{ scan_summary.risk_level | tojson }};
+
+async function askAI(mode) {
+  const btns = document.querySelectorAll('.ai-btn');
+  btns.forEach(b => b.disabled = true);
+  document.getElementById('aiLoading').style.display = 'flex';
+  document.getElementById('aiOutput').style.display  = 'none';
+
+  let findings = FINDINGS;
+  if (mode === 'critical') findings = FINDINGS.filter(f => f.severity==='CRITICAL' || f.severity==='HIGH');
+
+  const summary = findings.map(f =>
+    `[${f.severity}] ${f.rule_id}: ${f.issue} | Attack: ${f.attack} | Impact: ${f.impact} | Current fix: ${f.fix}`
+  ).join('\n');
+
+  let prompt;
+  if (mode === 'roadmap') {
+    prompt = `You are a senior cybersecurity engineer. An EASM tool scanned target "${TARGET}".
+Risk score: ${RISK_SCORE}/100 (${RISK_LEVEL}).
+Findings:
+${summary}
+
+Create a prioritised remediation roadmap:
+1. IMMEDIATE (0–24 hours): Critical/High issues
+2. SHORT-TERM (1–2 weeks): Medium issues
+3. LONG-TERM (1–3 months): Hardening and best practices
+4. Note estimated effort (Low / Medium / High) per item
+
+Format: [Priority] Finding → Action → Why it matters. Be concise and technical.`;
+  } else {
+    prompt = `You are a senior cybersecurity engineer. Target "${TARGET}" was scanned.
+Risk score: ${RISK_SCORE}/100 (${RISK_LEVEL}).
+
+Security findings:
+${summary}
+
+For each finding provide:
+1. Root cause (1–2 sentences)
+2. Step-by-step technical remediation (include commands where applicable)
+3. Verification steps to confirm fix
+4. Relevant CVE or security standard if applicable
+
+Be specific and actionable. Format with finding name as header.`;
+  }
+
+  try {
+    const res = await fetch('/ai_remediation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt })
+  });
+
+    const data = await res.json();
+    const text = data.output;
+    const formatted = text
+      .replace(/^##\s+(.+)$/gm, '<h3>$1</h3>')
+      .replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
+      .replace(/\*\*CRITICAL\*\*/g, '<span class="ai-sev-critical">CRITICAL</span>')
+      .replace(/\*\*HIGH\*\*/g,     '<span class="ai-sev-high">HIGH</span>')
+      .replace(/\*\*MEDIUM\*\*/g,   '<span class="ai-sev-medium">MEDIUM</span>')
+      .replace(/`([^`]+)`/g,        '<code>$1</code>');
+
+    document.getElementById('aiOutput').innerHTML  = formatted;
+    document.getElementById('aiOutput').style.display = 'block';
+  } catch(err) {
+    document.getElementById('aiOutput').textContent = 'Error: ' + err.message;
+    document.getElementById('aiOutput').style.display = 'block';
+  }
+
+  document.getElementById('aiLoading').style.display = 'none';
+  btns.forEach(b => b.disabled = false);
+}
+</script>
+
+{% endblock %}
